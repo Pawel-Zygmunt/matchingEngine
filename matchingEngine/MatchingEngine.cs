@@ -23,7 +23,7 @@ namespace matchingEngine
         {
             _tradeListener.OnAccept(order.OrderId);
 
-            if(order.GetType() == typeof(MarketOrder))
+            if(order is MarketOrder)
             {
                 MarketOrder incomingOrder = (MarketOrder)order;
 
@@ -44,7 +44,7 @@ namespace matchingEngine
                 if (incomingOrder.IsPartiallyFilled || !incomingOrder.IsTotallyFilled)
                 {
                     _book.AddOrder(incomingOrder);
-                    _tradeListener.OnAddLimitOrderToBook(incomingOrder.OrderId, incomingOrder.Price, incomingOrder.InitialQuantity);
+                    _tradeListener.OnAddLimitOrderToBook(incomingOrder.OrderId, incomingOrder.Price, incomingOrder.CurrentQuantity);
                 }
             }
 
@@ -57,6 +57,11 @@ namespace matchingEngine
             {
                 uint fillQuantity = resting.CurrentQuantity >= incoming.InitialQuantity ? incoming.InitialQuantity : resting.CurrentQuantity;
                 incoming.DecreaseQuantity(fillQuantity);
+                resting.DecreaseQuantity(fillQuantity);
+
+                if(resting.IsTotallyFilled)
+                    _book.RemoveFilledOrder(resting);
+                
                 _tradeListener.OnTrade(incoming.OrderId, resting.OrderId, resting.Price, fillQuantity);
             }
 
@@ -73,10 +78,17 @@ namespace matchingEngine
                 if (restingOrder == null || incomingOrder.IsTotallyFilled)
                     break;
 
-                if(incomingOrder.GetType() == typeof(LimitOrder) && incomingOrder.Type == OrderType.BUY && restingOrder.Price <= (incomingOrder as LimitOrder).Price)
+                if(incomingOrder is LimitOrder)
                 {
-                    FillOrderWith(incomingOrder, restingOrder);
-                    MarketPrice = restingOrder.Price;
+                    if(incomingOrder.Type == OrderType.BUY && restingOrder.Price <= (incomingOrder as LimitOrder).Price)
+                        FillOrderWith(incomingOrder, restingOrder);
+                    
+                    if(incomingOrder.Type == OrderType.SELL && restingOrder.Price >= (incomingOrder as LimitOrder).Price)
+                        FillOrderWith(incomingOrder, restingOrder);
+                }
+                else
+                {
+                    //if(incomingOrder.Type == OrderType.BUY )
                 }
             }
         }

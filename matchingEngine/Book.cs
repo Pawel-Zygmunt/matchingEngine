@@ -11,8 +11,8 @@ namespace matchingEngine
         private readonly SortedDictionary<double, PriceLevel> _bidSide;
         private readonly SortedDictionary<double, PriceLevel> _askSide;
 
-        public PriceLevel? BestBidPriceLevel { get; private set; }
-        public PriceLevel? BestAskPriceLevel { get; private set; }
+        public PriceLevel? _bestBidPriceLevel { get; private set; }
+        public PriceLevel? _bestAskPriceLevel { get; private set; }
 
 
         public Book()
@@ -23,18 +23,14 @@ namespace matchingEngine
             _bidSide = new SortedDictionary<double, PriceLevel>(priceComparerDescending);
             _askSide = new SortedDictionary<double, PriceLevel>(priceComparerAscending);
 
-            BestBidPriceLevel = null;
-            BestAskPriceLevel = null;
+            _bestBidPriceLevel = null;
+            _bestAskPriceLevel = null;
         }
 
         public LimitOrder? GetBestOrderForSide(OrderType orderType)
         {
-            var bestPriceLevel = orderType == OrderType.BUY ? BestBidPriceLevel : BestAskPriceLevel;
-
-            if(bestPriceLevel == null)
-                return null;
-
-            return bestPriceLevel.FirstOrder;
+            var bestPriceLevel = orderType == OrderType.BUY ? _bestBidPriceLevel : _bestAskPriceLevel;
+            return bestPriceLevel?.FirstOrder;
         }
 
         public void AddOrder(LimitOrder order)
@@ -54,9 +50,9 @@ namespace matchingEngine
                 PriceLevel priceLevel = GetOrAddPriceLevel(order.Price, _bidSide);
                 priceLevel.AddOrder(order);
 
-                if(BestBidPriceLevel == null || order.Price > BestBidPriceLevel.Price)
+                if(_bestBidPriceLevel == null || order.Price > _bestBidPriceLevel.Price)
                 {
-                    BestBidPriceLevel = priceLevel;
+                    _bestBidPriceLevel = priceLevel;
                 }
             }
             else
@@ -64,30 +60,53 @@ namespace matchingEngine
                 PriceLevel priceLevel = GetOrAddPriceLevel(order.Price, _askSide);
                 priceLevel.AddOrder(order);
 
-                if(BestAskPriceLevel == null || order.Price < BestAskPriceLevel.Price)
+                if(_bestAskPriceLevel == null || order.Price < _bestAskPriceLevel.Price)
                 {
-                    BestAskPriceLevel = priceLevel;
+                    _bestAskPriceLevel = priceLevel;
                 }
             }
         }
 
-        public void RemoveFilledOrderAndRemovePriceLevelIfEmpty(LimitOrder order)
+        public void RemoveFilledOrder(LimitOrder order)
         {
             if (!order.IsTotallyFilled)
                 throw new InvalidOperationException($"PriceLevelError: trying to remove order which is not filled completely for OrderId={order.OrderId}");
 
             var side = order.Type == OrderType.BUY ? _bidSide : _askSide;
 
-            if (side.TryGetValue(order.Price, out PriceLevel? priceLevel))
+            if(side.TryGetValue(order.Price, out PriceLevel? priceLevel))
             {
                 priceLevel.RemoveOrder(order);
-
-                if (priceLevel.OrderCount == 0)
-                    side.Remove(priceLevel.Price);
+                _RemovePriceLevelIfEmpty(priceLevel, side, order.Type);
             }
-            else
+        }
+
+        private void _RemovePriceLevelIfEmpty(PriceLevel priceLevel, SortedDictionary<double, PriceLevel> side, OrderType orderType)
+        {
+            if (priceLevel.OrderCount != 0) return;
+
+            side.Remove(priceLevel.Price);
+
+            if(orderType == OrderType.BUY && _bestBidPriceLevel?.Price == priceLevel.Price)
             {
-                throw new InvalidOperationException("price level does not exists in order book");
+                _bestBidPriceLevel = null;
+
+                if(side.Count > 0)
+                {
+                    var keyVal = side.FirstOrDefault();
+                    _bestBidPriceLevel = keyVal.Value;
+                }
+            }
+
+            if (orderType == OrderType.SELL && _bestAskPriceLevel?.Price == priceLevel.Price)
+            {
+                _bestAskPriceLevel = null;
+
+                if(side.Count>0)
+                {
+                    var keyVal = side.FirstOrDefault();
+                    _bestAskPriceLevel = keyVal.Value;
+                }
             }
         }
     }

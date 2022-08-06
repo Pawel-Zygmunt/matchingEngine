@@ -23,7 +23,7 @@ class MyTradeListener : ITradeListener
 
     public void OnTrade(Guid incomingOrderId, Guid restingOrderId, double matchPrice, uint matchQuantity)
     {
-        Console.WriteLine($"Order matched.... incomingOrderId : {incomingOrderId}, restingOrderId : {restingOrderId}, executedQuantity : {matchQuantity}, exetedPrice : {matchPrice}");
+        Console.WriteLine($"Order matched.... incomingOrderId: {incomingOrderId}, restingOrderId: {restingOrderId}, executedQuantity: {matchQuantity}, Price: {matchPrice}");
     }
 }
 
@@ -35,9 +35,9 @@ class Program
     {
         MatchingEngine matchingEngine = new MatchingEngine(new MyTradeListener());
 
-        matchingEngine.AddOrder(new LimitOrder(type: OrderType.SELL, userId: new Guid(), price: 10.00, initialQuantity: 5));
+        matchingEngine.AddOrder(new LimitOrder(type: OrderType.BUY, userId: Guid.NewGuid(), price: 15.00, initialQuantity: 5));
 
-        matchingEngine.AddOrder(new MarketOrder(type: OrderType.BUY, userId: new Guid(), initialQuantity: 5));
+        matchingEngine.AddOrder(new LimitOrder(type: OrderType.SELL, userId: Guid.NewGuid(), price: 10.00, initialQuantity: 10));
     }
 }
 

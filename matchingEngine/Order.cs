@@ -13,7 +13,7 @@ namespace matchingEngine
             if (initialQuantity == 0)
                 throw new ArgumentOutOfRangeException("initialQuantity cannot be 0, Order constructor");
 
-            OrderId = new Guid();
+            OrderId = Guid.NewGuid();
             UserId = userId;
             InitialQuantity = initialQuantity;
             CurrentQuantity = initialQuantity;
