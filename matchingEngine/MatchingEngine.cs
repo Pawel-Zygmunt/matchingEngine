@@ -44,44 +44,41 @@ namespace matchingEngine
                 if (incomingOrder.IsPartiallyFilled || !incomingOrder.IsTotallyFilled)
                 {
                     _book.AddOrder(incomingOrder);
+                    _tradeListener.OnAddLimitOrderToBook(incomingOrder.OrderId, incomingOrder.Price, incomingOrder.InitialQuantity);
                 }
             }
 
             return OrderMatchingResult.OrderAccepted;
         }
 
-        private bool MatchWithRestingOrders(Order incomingOrder)
+        private void MatchWithRestingOrders(Order incomingOrder)
         {
-            bool anyMatchHappend = false;
+            void FillOrderWith(Order incoming, LimitOrder resting)
+            {
+                uint fillQuantity = resting.CurrentQuantity >= incoming.InitialQuantity ? incoming.InitialQuantity : resting.CurrentQuantity;
+                incoming.DecreaseQuantity(fillQuantity);
+                _tradeListener.OnTrade(incoming.OrderId, resting.OrderId, resting.Price, fillQuantity);
+            }
+
+            //double PercentageDifference(double val1, double val2)
+            //{
+            //    return Math.Abs(val1 - val2) / (val1 + val2) / 2 * 100;
+            //}
+
 
             while (true)
             {
                 LimitOrder? restingOrder = _book.GetBestOrderForSide(incomingOrder.Type == OrderType.BUY ? OrderType.SELL : OrderType.BUY);
 
-                if (restingOrder == null)
+                if (restingOrder == null || incomingOrder.IsTotallyFilled)
                     break;
 
-                double matchPrice = restingOrder.Price;
-
-                if (incomingOrder.Type == OrderType.BUY && (restingOrder.Price <= incomingOrder.Price))
+                if(incomingOrder.GetType() == typeof(LimitOrder) && incomingOrder.Type == OrderType.BUY && restingOrder.Price <= (incomingOrder as LimitOrder).Price)
                 {
-                    uint fillQuantity = restingOrder.CurrentQuantity >= incomingOrder.InitialQuantity ? incomingOrder.InitialQuantity : restingOrder.CurrentQuantity;
-
-                    incomingOrder.DecreaseQuantity(fillQuantity);
-
-                    _book.FillLimitOrderAndRemovePriceLevelIfEmpty(restingOrder, fillQuantity);
-
-                    _tradeListener.OnTrade(incomingOrder.OrderId, restingOrder.OrderId, matchPrice, fillQuantity);
-
-                    MarketPrice = matchPrice;
-                    anyMatchHappend = true;
+                    FillOrderWith(incomingOrder, restingOrder);
+                    MarketPrice = restingOrder.Price;
                 }
-
-                if (incomingOrder.IsFilled)
-                    break;
             }
-
-            return anyMatchHappend;
         }
     }
 }
