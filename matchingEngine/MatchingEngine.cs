@@ -19,7 +19,7 @@ namespace matchingEngine
             MarketPrice = 0;
         }
 
-        public OrderMatchingResult AddOrder(Order order)
+        public void AddOrder(Order order)
         {
             _tradeListener.OnAccept(order.OrderId);
 
@@ -30,10 +30,10 @@ namespace matchingEngine
                 MatchWithRestingOrders(incomingOrder);
 
                 if (incomingOrder.IsPartiallyFilled)
-                    return OrderMatchingResult.InsufficientVolatilityPartialCancel;
-
+                    _tradeListener.OnCancel(incomingOrder.OrderId, OrderCancelReason.InsufficientVolatilityOrExceededRangePartialCancel);
+                    
                 if (incomingOrder.IsNotFilledAtAll)
-                    return OrderMatchingResult.InsufficientVolatilityTotalCancel;
+                    _tradeListener.OnCancel(incomingOrder.OrderId, OrderCancelReason.InsufficientVolatilityOrExceededRangeTotalCancel);
             }
             else
             {
@@ -41,34 +41,34 @@ namespace matchingEngine
 
                 MatchWithRestingOrders(incomingOrder);
 
-                if (incomingOrder.IsPartiallyFilled || !incomingOrder.IsTotallyFilled)
+                if (incomingOrder.IsPartiallyFilled || incomingOrder.IsNotFilledAtAll)
                 {
                     _book.AddOrder(incomingOrder);
                     _tradeListener.OnAddLimitOrderToBook(incomingOrder.OrderId, incomingOrder.Price, incomingOrder.CurrentQuantity);
                 }
             }
-
-            return OrderMatchingResult.OrderAccepted;
         }
 
         private void MatchWithRestingOrders(Order incomingOrder)
         {
-            void FillOrderWith(Order incoming, LimitOrder resting)
+            void TryFillOrder(Order incoming, LimitOrder resting)
             {
                 uint fillQuantity = resting.CurrentQuantity >= incoming.InitialQuantity ? incoming.InitialQuantity : resting.CurrentQuantity;
                 incoming.DecreaseQuantity(fillQuantity);
                 resting.DecreaseQuantity(fillQuantity);
+                MarketPrice = resting.Price;
 
-                if(resting.IsTotallyFilled)
+                if (resting.IsTotallyFilled)
                     _book.RemoveFilledOrder(resting);
                 
                 _tradeListener.OnTrade(incoming.OrderId, resting.OrderId, resting.Price, fillQuantity);
             }
 
-            //double PercentageDifference(double val1, double val2)
-            //{
-            //    return Math.Abs(val1 - val2) / (val1 + val2) / 2 * 100;
-            //}
+            
+            double PercentageDifferenceBetweenMarketPriceAndRestingOrder(double restingOrderPrice)
+            {
+                return Math.Abs(MarketPrice - restingOrderPrice) / (MarketPrice + restingOrderPrice) / 2 * 100;
+            }
 
 
             while (true)
@@ -80,15 +80,23 @@ namespace matchingEngine
 
                 if(incomingOrder is LimitOrder)
                 {
-                    if(incomingOrder.Type == OrderType.BUY && restingOrder.Price <= (incomingOrder as LimitOrder).Price)
-                        FillOrderWith(incomingOrder, restingOrder);
-                    
-                    if(incomingOrder.Type == OrderType.SELL && restingOrder.Price >= (incomingOrder as LimitOrder).Price)
-                        FillOrderWith(incomingOrder, restingOrder);
+                    if(incomingOrder.Type == OrderType.BUY && restingOrder.Price <= (incomingOrder as LimitOrder)!.Price)
+                        TryFillOrder(incomingOrder, restingOrder);
+                        
+                    if(incomingOrder.Type == OrderType.SELL && restingOrder.Price >= (incomingOrder as LimitOrder)!.Price)
+                        TryFillOrder(incomingOrder, restingOrder);
+                        
                 }
                 else
                 {
-                    //if(incomingOrder.Type == OrderType.BUY )
+                    if(PercentageDifferenceBetweenMarketPriceAndRestingOrder(restingOrder.Price) < 6)
+                    {
+                        TryFillOrder(incomingOrder, restingOrder);
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
             }
         }
